@@ -35,7 +35,20 @@ void genExpr(ASTNode* node) {
             int leftReg = tempReg - 1;
             genExpr(node->data.binop.right);
             int rightReg = tempReg - 1;
-            fprintf(output, "    add $t%d, $t%d, $t%d\n", leftReg, leftReg, rightReg);
+
+            if (node->data.binop.op == '+') {
+                fprintf(output, "    add $t%d, $t%d, $t%d\n", leftReg, leftReg, rightReg);
+            } else if (node->data.binop.op == '-') {
+                fprintf(output, "    sub $t%d, $t%d, $t%d\n", leftReg, leftReg, rightReg);
+            } else if (node->data.binop.op == '*') {
+                fprintf(output, "    mul $t%d, $t%d, $t%d\n", leftReg, leftReg, rightReg);
+            } else if (node->data.binop.op == '/') {
+                fprintf(output, "    div $t%d, $t%d\n", leftReg, rightReg);
+                fprintf(output, "    mflo $t%d\n", leftReg);
+            } else {
+                fprintf(stderr, "Error: Unsupported binary operator %c\n", node->data.binop.op);
+                exit(1);
+            }
             tempReg = leftReg + 1;
             break;
             
