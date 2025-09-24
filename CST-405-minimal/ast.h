@@ -32,6 +32,8 @@ typedef struct ASTNode {
         
         /* Variable or declaration name (NODE_VAR, NODE_DECL) */
         char* name;
+        /* int value; */ /* For potential future use in declarations with assignment */
+
         
         /* Binary operation structure (NODE_BINOP) */
         struct {
@@ -63,7 +65,8 @@ typedef struct ASTNode {
 ASTNode* createNum(int value);                                   /* Create number node */
 ASTNode* createVar(char* name);                                  /* Create variable node */
 ASTNode* createBinOp(char op, ASTNode* left, ASTNode* right);   /* Create binary op node */
-ASTNode* createDecl(char* name);                                 /* Create declaration node */
+ASTNode* createDecl(char* name);  
+/* ASTNOde* createDeclWithAssgn(char* name, int value) */                               /* Create declaration node */
 ASTNode* createAssign(char* var, ASTNode* value);               /* Create assignment node */
 ASTNode* createPrint(ASTNode* expr);                            /* Create print node */
 ASTNode* createStmtList(ASTNode* stmt1, ASTNode* stmt2);        /* Create statement list */

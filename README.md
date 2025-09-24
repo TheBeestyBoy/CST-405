@@ -210,27 +210,160 @@ Hierarchical scope-based symbol table with support for:
 - Type checking
 - Memory allocation tracking
 
-### Three-Address Code
+### Three-Address Code (TAC) Generation
 
-Intermediate representation using simple instructions:
+**Overview:**
+Three-Address Code is an intermediate representation where each instruction has at most three operands (result = arg1 op arg2). This simplifies both optimization and final code generation.
+
+**TAC Generation Process:**
+1. **AST to TAC Conversion**: Each AST node type maps to specific TAC instructions
+   - Declarations: `NODE_DECL` → `TAC_DECL`
+   - Assignments: `NODE_ASSIGN` → `TAC_ASSIGN`
+   - Expressions: `NODE_BINOP` → `TAC_ADD` with temporary variables
+   - Print statements: `NODE_PRINT` → `TAC_PRINT`
+
+2. **Expression Handling**: Complex expressions use temporary variables
+   - Numbers: Converted to string literals
+   - Variables: Referenced by name
+   - Binary operations: Create temporary variables (t0, t1, t2...)
+
+**Example TAC Generation:**
+```c
+// Source Code:
+int x; int y;
+x = 10; y = 20;
+print(x + y);
+
+// Generated TAC:
+1: DECL x          // Declare variable 'x'
+2: DECL y          // Declare variable 'y'
+3: x = 10          // Assign constant to x
+4: y = 20          // Assign constant to y
+5: t0 = x + y      // Add: store result in temp t0
+6: PRINT t0        // Output value of t0
 ```
-t0 = 3 * 4
-t1 = 2 + t0
-x = t1
+
+### TAC Optimization Implementation
+
+**Optimization Techniques:**
+1. **Constant Folding** - Evaluates compile-time constant expressions
+   - `10 + 20` becomes `30` directly
+2. **Copy Propagation** - Replaces variable references with their known values
+   - Uses a value propagation table to track variable-value mappings
+
+**Optimization Process:**
+1. **Track assignments**: Store variable-value mappings in propagation table
+2. **Substitute references**: Replace variables with known values
+3. **Fold constants**: Evaluate constant expressions at compile-time
+4. **Propagate results**: Update the propagation table with new constants
+
+**Optimization Example:**
+```c
+// Original TAC:
+1: DECL x
+2: DECL y
+3: x = 10          // x now maps to "10"
+4: y = 20          // y now maps to "20"
+5: t0 = x + y      // Substitute: t0 = 10 + 20
+6: PRINT t0
+
+// Optimized TAC:
+1: DECL x
+2: DECL y
+3: x = 10          // Constant value: 10
+4: y = 20          // Constant value: 20
+5: t0 = 30         // Folded: 10 + 20 = 30
+6: PRINT 30        // Propagated constant
 ```
 
-### Optimization Techniques
+**Additional Optimization Techniques (for advanced implementations):**
+1. **Dead Code Elimination** - Remove unreachable or unused code
+2. **Algebraic Simplification** - Simplify expressions (x+0 → x, x*1 → x)
+3. **Common Subexpression Elimination** - Reuse computed values
 
-1. **Constant Folding** - Evaluate constant expressions at compile time
-2. **Constant Propagation** - Replace variables with known constants
-3. **Dead Code Elimination** - Remove unreachable or unused code
-4. **Copy Propagation** - Replace copies with original values
-5. **Algebraic Simplification** - Simplify expressions (x+0 → x, x*1 → x)
-6. **Common Subexpression Elimination** - Reuse computed values
+### MIPS Code Generation Implementation
 
-### MIPS Code Generation
+**Overview:**
+The final phase converts the AST directly to MIPS assembly, using the symbol table for variable memory management and register allocation for temporary values.
 
-Generates MIPS assembly code with:
+**MIPS Architecture Used:**
+- **Registers:**
+  - `$sp`: Stack pointer (points to top of stack)
+  - `$t0-$t7`: Temporary registers for computations
+  - `$a0`: Argument register for system calls
+  - `$v0`: System call number register
+- **Memory Layout:**
+  - Variables stored on stack with negative offsets from `$sp`
+  - Stack grows downward (decreasing addresses)
+  - Each integer variable occupies 4 bytes
+
+**Code Generation Process:**
+
+**1. Program Initialization:**
+```mips
+.data                    # Data section (empty for simple language)
+.text                    # Code section
+.globl main             # Make main globally visible
+main:                   # Program entry point
+    addi $sp, $sp, -400 # Allocate 400 bytes stack space
+```
+
+**2. Variable Operations:**
+- **Declaration**: Adds to symbol table, generates comment
+- **Assignment**: `li $t0, 10; sw $t0, 0($sp)` (load immediate, store word)
+- **Variable Access**: `lw $t1, 0($sp)` (load word from stack offset)
+- **Addition**: `lw $t0, 0($sp); lw $t1, 4($sp); add $t0, $t0, $t1`
+
+**3. Print Statement:**
+```mips
+move $a0, $t0     # Move value to argument register
+li $v0, 1         # System call number for print integer
+syscall           # Execute system call
+li $v0, 11        # System call for print character
+li $a0, 10        # ASCII newline character
+syscall           # Print newline
+```
+
+**Complete MIPS Example:**
+```c
+// Source: int x; int y; x = 10; y = 20; print(x + y);
+```
+```mips
+.data
+.text
+.globl main
+main:
+    addi $sp, $sp, -400    # Allocate stack
+
+    # x = 10;
+    li $t0, 10
+    sw $t0, 0($sp)
+
+    # y = 20;
+    li $t1, 20
+    sw $t1, 4($sp)
+
+    # print(x + y);
+    lw $t0, 0($sp)         # Load x
+    lw $t1, 4($sp)         # Load y
+    add $t0, $t0, $t1      # x + y
+    move $a0, $t0          # Prepare for print
+    li $v0, 1              # Print integer
+    syscall
+
+    # Exit program
+    addi $sp, $sp, 400
+    li $v0, 10
+    syscall
+```
+
+**Symbol Table Integration:**
+The MIPS generator uses the symbol table for:
+- Variable declarations: Add to symbol table, get stack offset
+- Variable access: Look up stack offset for load/store operations
+- Error detection: Verify variables are declared before use
+
+**Advanced Features (for full compiler):**
 - Register allocation (using $t0-$t7, $s0-$s7)
 - Stack frame management
 - Function calling conventions

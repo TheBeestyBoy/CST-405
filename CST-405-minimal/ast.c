@@ -41,6 +41,17 @@ ASTNode* createDecl(char* name) {
     return node;
 }
 
+/*
+ASTNode* createDeclWithAssgn(char* name, int value) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_DECL;
+    node->data.name = strdup(name); 
+    node->data.value = value;
+    return node;
+}
+
+*/
+
 /* Create an assignment statement node */
 ASTNode* createAssign(char* var, ASTNode* value) {
     ASTNode* node = malloc(sizeof(ASTNode));
