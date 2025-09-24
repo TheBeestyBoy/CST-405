@@ -1,8 +1,8 @@
-/* A Bison parser, made by GNU Bison 3.8.2.  */
+/* A Bison parser, made by GNU Bison 3.7.4.  */
 
 /* Bison interface for Yacc-like parsers in C
 
-   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2021 Free Software Foundation,
+   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2020 Free Software Foundation,
    Inc.
 
    This program is free software: you can redistribute it and/or modify
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* As a special exception, you may create a larger work that contains
    part or all of the Bison parser skeleton and distribute that work
@@ -55,9 +55,11 @@ extern int yydebug;
     YYerror = 256,                 /* error  */
     YYUNDEF = 257,                 /* "invalid token"  */
     NUM = 258,                     /* NUM  */
-    ID = 259,                      /* ID  */
-    INT = 260,                     /* INT  */
-    PRINT = 261                    /* PRINT  */
+    DOUBLE_LITERAL = 259,          /* DOUBLE_LITERAL  */
+    ID = 260,                      /* ID  */
+    INT = 261,                     /* INT  */
+    DOUBLE = 262,                  /* DOUBLE  */
+    PRINT = 263                    /* PRINT  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -69,10 +71,12 @@ union YYSTYPE
 #line 25 "parser.y"
 
     int num;                /* For integer literals */
+    double dbl;             /* For double literals */
     char* str;              /* For identifiers */
     struct ASTNode* node;   /* For AST nodes */
+    int dtype;              /* For data types */
 
-#line 76 "parser.tab.h"
+#line 80 "parser.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -83,8 +87,6 @@ typedef union YYSTYPE YYSTYPE;
 
 extern YYSTYPE yylval;
 
-
 int yyparse (void);
-
 
 #endif /* !YY_YY_PARSER_TAB_H_INCLUDED  */

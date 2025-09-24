@@ -20,7 +20,7 @@ void initSymTab() {
 }
 
 /* Add a new variable to the symbol table */
-int addVar(char* name) {
+int addVar(char* name, DataType type) {
     /* Check for duplicate declaration */
     if (isVarDeclared(name)) {
         printf("SYMBOL TABLE: Failed to add '%s' - already declared\n", name);
@@ -30,12 +30,17 @@ int addVar(char* name) {
     /* Add new symbol entry */
     symtab.vars[symtab.count].name = strdup(name);
     symtab.vars[symtab.count].offset = symtab.nextOffset;
+    symtab.vars[symtab.count].type = type;
 
-    /* Advance offset by 4 bytes (size of int in MIPS) */
-    symtab.nextOffset += 4;
+    /* Advance offset by appropriate amount (8 bytes for double, 4 for int) */
+    int size = (type == TYPE_DOUBLE) ? 8 : 4;
+    symtab.nextOffset += size;
     symtab.count++;
 
-    printf("SYMBOL TABLE: Added variable '%s' at offset %d\n", name, symtab.vars[symtab.count - 1].offset);
+    printf("SYMBOL TABLE: Added variable '%s' (%s) at offset %d\n", 
+           name, 
+           type == TYPE_INT ? "int" : "double",
+           symtab.vars[symtab.count - 1].offset);
     printSymTab();
 
     /* Return the offset for this variable */
@@ -55,6 +60,16 @@ int getVarOffset(char* name) {
     return -1;  /* Variable not found - semantic error */
 }
 
+/* Get the type of a variable */
+DataType getVarType(char* name) {
+    for (int i = 0; i < symtab.count; i++) {
+        if (strcmp(symtab.vars[i].name, name) == 0) {
+            return symtab.vars[i].type;
+        }
+    }
+    return TYPE_INT;  /* Default if not found */
+}
+
 /* Check if a variable has been declared */
 int isVarDeclared(char* name) {
     return getVarOffset(name) != -1;  /* True if found, false otherwise */
@@ -69,7 +84,11 @@ void printSymTab() {
     } else {
         printf("Variables:\n");
         for (int i = 0; i < symtab.count; i++) {
-            printf("  [%d] %s -> offset %d\n", i, symtab.vars[i].name, symtab.vars[i].offset);
+            printf("  [%d] %s (%s) -> offset %d\n", 
+                   i, 
+                   symtab.vars[i].name,
+                   symtab.vars[i].type == TYPE_INT ? "int" : "double",
+                   symtab.vars[i].offset);
         }
     }
     printf("==========================\n\n");

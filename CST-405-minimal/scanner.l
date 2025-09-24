@@ -15,11 +15,17 @@
 %%
 
 "int"           { return INT; }
+"double"        { return DOUBLE; }
 "print"         { return PRINT; }
 
 [a-zA-Z_][a-zA-Z0-9_]* { 
     yylval.str = strdup(yytext);
     return ID; 
+}
+
+[0-9]+\.[0-9]+  { 
+    yylval.dbl = atof(yytext);
+    return DOUBLE_LITERAL; 
 }
 
 [0-9]+          { 
@@ -28,12 +34,18 @@
 }
 
 "+"             { return '+'; }
+"-"             { return '-'; }
+"*"             { return '*'; }
+"/"             { return '/'; }
 "="             { return '='; }
 ";"             { return ';'; }
 "("             { return '('; }
 ")"             { return ')'; }
 
-[ \t\n]         { }
+"//"[^\n]*      { /* Single-line comment - ignore */ }
+"/*"([^*]|\*+[^*/])*\*+"/" { /* Multi-line comment - ignore */ }
+
+[ \t\n]         { /* Whitespace - ignore */ }
 
 .               { printf("Lexical Error: Unknown character '%c'\n", *yytext); }
 

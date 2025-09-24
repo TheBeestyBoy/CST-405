@@ -7,9 +7,16 @@
  * Each node represents a construct in the language
  */
 
+/* DATA TYPES in our language */
+typedef enum {
+    TYPE_INT,
+    TYPE_DOUBLE
+} DataType;
+
 /* NODE TYPES - Different kinds of AST nodes in our language */
 typedef enum {
-    NODE_NUM,       /* Numeric literal (e.g., 42) */
+    NODE_NUM,       /* Integer literal (e.g., 42) */
+    NODE_DOUBLE,    /* Double literal (e.g., 3.14) */
     NODE_VAR,       /* Variable reference (e.g., x) */
     NODE_BINOP,     /* Binary operation (e.g., x + y) */
     NODE_DECL,      /* Variable declaration (e.g., int x) */
@@ -27,12 +34,20 @@ typedef struct ASTNode {
     
     /* Union allows same memory to store different data types */
     union {
-        /* Literal number value (NODE_NUM) */
+        /* Integer literal value (NODE_NUM) */
         int num;
         
-        /* Variable or declaration name (NODE_VAR, NODE_DECL) */
+        /* Double literal value (NODE_DOUBLE) */
+        double dbl;
+        
+        /* Variable reference (NODE_VAR) */
         char* name;
-        /* int value; */ /* For potential future use in declarations with assignment */
+        
+        /* Declaration (NODE_DECL) */
+        struct {
+            char* name;
+            DataType type;
+        } decl;
 
         
         /* Binary operation structure (NODE_BINOP) */
@@ -62,11 +77,11 @@ typedef struct ASTNode {
 /* AST CONSTRUCTION FUNCTIONS
  * These functions are called by the parser to build the tree
  */
-ASTNode* createNum(int value);                                   /* Create number node */
+ASTNode* createNum(int value);                                   /* Create integer node */
+ASTNode* createDouble(double value);                             /* Create double node */
 ASTNode* createVar(char* name);                                  /* Create variable node */
 ASTNode* createBinOp(char op, ASTNode* left, ASTNode* right);   /* Create binary op node */
-ASTNode* createDecl(char* name);  
-/* ASTNOde* createDeclWithAssgn(char* name, int value) */                               /* Create declaration node */
+ASTNode* createDecl(char* name, DataType type);                 /* Create declaration node */
 ASTNode* createAssign(char* var, ASTNode* value);               /* Create assignment node */
 ASTNode* createPrint(ASTNode* expr);                            /* Create print node */
 ASTNode* createStmtList(ASTNode* stmt1, ASTNode* stmt2);        /* Create statement list */

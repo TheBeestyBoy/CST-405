@@ -5,11 +5,37 @@
 
 FILE* output;
 int tempReg = 0;
+int tempFloatReg = 0;
 
 int getNextTemp() {
     int reg = tempReg++;
     if (tempReg > 7) tempReg = 0;  // Reuse $t0-$t7
     return reg;
+}
+
+int getNextFloatTemp() {
+    int reg = tempFloatReg;
+    tempFloatReg += 2;  // Doubles use even-odd register pairs
+    if (tempFloatReg > 30) tempFloatReg = 0;  // Reuse $f0-$f30
+    return reg;
+}
+
+/* Check if expression produces a double result */
+int isDoubleExpr(ASTNode* node) {
+    if (!node) return 0;
+    
+    switch(node->type) {
+        case NODE_DOUBLE:
+            return 1;
+        case NODE_VAR:
+            return getVarType(node->data.name) == TYPE_DOUBLE;
+        case NODE_BINOP:
+            // If either operand is double, result is double
+            return isDoubleExpr(node->data.binop.left) || 
+                   isDoubleExpr(node->data.binop.right);
+        default:
+            return 0;
+    }
 }
 
 void genExpr(ASTNode* node) {
@@ -20,24 +46,97 @@ void genExpr(ASTNode* node) {
             fprintf(output, "    li $t%d, %d\n", getNextTemp(), node->data.num);
             break;
             
+        case NODE_DOUBLE: {
+            // Load double constant - need to use .data section
+            static int doubleConstCount = 0;
+            fprintf(output, "    .data\n");
+            fprintf(output, "double_%d: .double %.6f\n", doubleConstCount, node->data.dbl);
+            fprintf(output, "    .text\n");
+            fprintf(output, "    la $t0, double_%d\n", doubleConstCount);
+            fprintf(output, "    ldc1 $f%d, 0($t0)\n", getNextFloatTemp());
+            doubleConstCount++;
+            break;
+        }
+            
         case NODE_VAR: {
             int offset = getVarOffset(node->data.name);
             if (offset == -1) {
                 fprintf(stderr, "Error: Variable %s not declared\n", node->data.name);
                 exit(1);
             }
-            fprintf(output, "    lw $t%d, %d($sp)\n", getNextTemp(), offset);
+            DataType varType = getVarType(node->data.name);
+            if (varType == TYPE_DOUBLE) {
+                fprintf(output, "    ldc1 $f%d, %d($sp)\n", getNextFloatTemp(), offset);
+            } else {
+                fprintf(output, "    lw $t%d, %d($sp)\n", getNextTemp(), offset);
+            }
             break;
         }
         
-        case NODE_BINOP:
+        case NODE_BINOP: {
+            int isLeftDouble = isDoubleExpr(node->data.binop.left);
+            int isRightDouble = isDoubleExpr(node->data.binop.right);
+            int isResultDouble = isLeftDouble || isRightDouble;
+            
             genExpr(node->data.binop.left);
-            int leftReg = tempReg - 1;
+            int leftIntReg = tempReg - 1;
+            int leftFloatReg = tempFloatReg - 2;
+            
             genExpr(node->data.binop.right);
-            int rightReg = tempReg - 1;
-            fprintf(output, "    add $t%d, $t%d, $t%d\n", leftReg, leftReg, rightReg);
-            tempReg = leftReg + 1;
+            int rightIntReg = tempReg - 1;
+            int rightFloatReg = tempFloatReg - 2;
+            
+            if (isResultDouble) {
+                // Convert int to double if needed
+                if (!isLeftDouble) {
+                    fprintf(output, "    mtc1 $t%d, $f%d\n", leftIntReg, leftFloatReg);
+                    fprintf(output, "    cvt.d.w $f%d, $f%d\n", leftFloatReg, leftFloatReg);
+                }
+                if (!isRightDouble) {
+                    fprintf(output, "    mtc1 $t%d, $f%d\n", rightIntReg, rightFloatReg);
+                    fprintf(output, "    cvt.d.w $f%d, $f%d\n", rightFloatReg, rightFloatReg);
+                }
+                
+                // Perform floating-point operation
+                switch(node->data.binop.op) {
+                    case '+':
+                        fprintf(output, "    add.d $f%d, $f%d, $f%d\n", leftFloatReg, leftFloatReg, rightFloatReg);
+                        break;
+                    case '-':
+                        fprintf(output, "    sub.d $f%d, $f%d, $f%d\n", leftFloatReg, leftFloatReg, rightFloatReg);
+                        break;
+                    case '*':
+                        fprintf(output, "    mul.d $f%d, $f%d, $f%d\n", leftFloatReg, leftFloatReg, rightFloatReg);
+                        break;
+                    case '/':
+                        fprintf(output, "    div.d $f%d, $f%d, $f%d\n", leftFloatReg, leftFloatReg, rightFloatReg);
+                        break;
+                }
+                tempFloatReg = leftFloatReg + 2;
+            } else {
+                // Integer operations
+                switch(node->data.binop.op) {
+                    case '+':
+                        fprintf(output, "    add $t%d, $t%d, $t%d\n", leftIntReg, leftIntReg, rightIntReg);
+                        break;
+                    case '-':
+                        fprintf(output, "    sub $t%d, $t%d, $t%d\n", leftIntReg, leftIntReg, rightIntReg);
+                        break;
+                    case '*':
+                        fprintf(output, "    mul $t%d, $t%d, $t%d\n", leftIntReg, leftIntReg, rightIntReg);
+                        break;
+                    case '/':
+                        fprintf(output, "    div $t%d, $t%d\n", leftIntReg, rightIntReg);
+                        fprintf(output, "    mflo $t%d\n", leftIntReg);  // Get quotient from LO register
+                        break;
+                    default:
+                        fprintf(stderr, "Error: Unknown operator %c\n", node->data.binop.op);
+                        exit(1);
+                }
+                tempReg = leftIntReg + 1;
+            }
             break;
+        }
             
         default:
             break;
@@ -49,12 +148,14 @@ void genStmt(ASTNode* node) {
     
     switch(node->type) {
         case NODE_DECL: {
-            int offset = addVar(node->data.name);
+            int offset = addVar(node->data.decl.name, node->data.decl.type);
             if (offset == -1) {
-                fprintf(stderr, "Error: Variable %s already declared\n", node->data.name);
+                fprintf(stderr, "Error: Variable %s already declared\n", node->data.decl.name);
                 exit(1);
             }
-            fprintf(output, "    # Declared %s at offset %d\n", node->data.name, offset);
+            fprintf(output, "    # Declared %s %s at offset %d\n", 
+                    node->data.decl.type == TYPE_INT ? "int" : "double",
+                    node->data.decl.name, offset);
             break;
         }
         
@@ -64,23 +165,53 @@ void genStmt(ASTNode* node) {
                 fprintf(stderr, "Error: Variable %s not declared\n", node->data.assign.var);
                 exit(1);
             }
+            DataType varType = getVarType(node->data.assign.var);
             genExpr(node->data.assign.value);
-            fprintf(output, "    sw $t%d, %d($sp)\n", tempReg - 1, offset);
+            
+            if (varType == TYPE_DOUBLE) {
+                if (isDoubleExpr(node->data.assign.value)) {
+                    fprintf(output, "    sdc1 $f%d, %d($sp)\n", tempFloatReg - 2, offset);
+                } else {
+                    // Convert int to double before storing
+                    fprintf(output, "    mtc1 $t%d, $f0\n", tempReg - 1);
+                    fprintf(output, "    cvt.d.w $f0, $f0\n");
+                    fprintf(output, "    sdc1 $f0, %d($sp)\n", offset);
+                }
+                tempFloatReg = 0;
+            } else {
+                if (isDoubleExpr(node->data.assign.value)) {
+                    // Convert double to int before storing
+                    fprintf(output, "    cvt.w.d $f%d, $f%d\n", tempFloatReg - 2, tempFloatReg - 2);
+                    fprintf(output, "    mfc1 $t0, $f%d\n", tempFloatReg - 2);
+                    fprintf(output, "    sw $t0, %d($sp)\n", offset);
+                } else {
+                    fprintf(output, "    sw $t%d, %d($sp)\n", tempReg - 1, offset);
+                }
+            }
             tempReg = 0;
+            tempFloatReg = 0;
             break;
         }
         
         case NODE_PRINT:
             genExpr(node->data.expr);
-            fprintf(output, "    # Print integer\n");
-            fprintf(output, "    move $a0, $t%d\n", tempReg - 1);
-            fprintf(output, "    li $v0, 1\n");
-            fprintf(output, "    syscall\n");
+            if (isDoubleExpr(node->data.expr)) {
+                fprintf(output, "    # Print double\n");
+                fprintf(output, "    mov.d $f12, $f%d\n", tempFloatReg - 2);
+                fprintf(output, "    li $v0, 3\n");  // Print double syscall
+                fprintf(output, "    syscall\n");
+                tempFloatReg = 0;
+            } else {
+                fprintf(output, "    # Print integer\n");
+                fprintf(output, "    move $a0, $t%d\n", tempReg - 1);
+                fprintf(output, "    li $v0, 1\n");  // Print int syscall
+                fprintf(output, "    syscall\n");
+                tempReg = 0;
+            }
             fprintf(output, "    # Print newline\n");
             fprintf(output, "    li $v0, 11\n");
             fprintf(output, "    li $a0, 10\n");
             fprintf(output, "    syscall\n");
-            tempReg = 0;
             break;
             
         case NODE_STMT_LIST:

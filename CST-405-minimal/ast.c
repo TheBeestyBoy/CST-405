@@ -7,11 +7,19 @@
 #include <string.h>
 #include "ast.h"
 
-/* Create a number literal node */
+/* Create an integer literal node */
 ASTNode* createNum(int value) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_NUM;
     node->data.num = value;  /* Store the integer value */
+    return node;
+}
+
+/* Create a double literal node */
+ASTNode* createDouble(double value) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_DOUBLE;
+    node->data.dbl = value;  /* Store the double value */
     return node;
 }
 
@@ -34,10 +42,11 @@ ASTNode* createBinOp(char op, ASTNode* left, ASTNode* right) {
 }
 
 /* Create a variable declaration node */
-ASTNode* createDecl(char* name) {
+ASTNode* createDecl(char* name, DataType dtype) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_DECL;
-    node->data.name = strdup(name);  /* Store variable name */
+    node->data.decl.name = strdup(name);  /* Store variable name */
+    node->data.decl.type = dtype;         /* Store data type */
     return node;
 }
 
@@ -90,6 +99,9 @@ void printAST(ASTNode* node, int level) {
         case NODE_NUM:
             printf("NUM: %d\n", node->data.num);
             break;
+        case NODE_DOUBLE:
+            printf("DOUBLE: %.2f\n", node->data.dbl);
+            break;
         case NODE_VAR:
             printf("VAR: %s\n", node->data.name);
             break;
@@ -99,7 +111,9 @@ void printAST(ASTNode* node, int level) {
             printAST(node->data.binop.right, level + 1);
             break;
         case NODE_DECL:
-            printf("DECL: %s\n", node->data.name);
+            printf("DECL: %s %s\n", 
+                   node->data.decl.type == TYPE_INT ? "int" : "double",
+                   node->data.decl.name);
             break;
         case NODE_ASSIGN:
             printf("ASSIGN: %s\n", node->data.assign.var);

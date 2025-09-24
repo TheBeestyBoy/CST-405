@@ -7,8 +7,8 @@ y = 20;
 z = x + y;
 print(z);
 
-x = z + 5;
+x = x * 5;
 print(x);
 
-y = x + y + z;
+y = 10 / 2;
 print(y);

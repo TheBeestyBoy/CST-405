@@ -24,20 +24,27 @@ ASTNode* root = NULL;          /* Root of the Abstract Syntax Tree */
  */
 %union {
     int num;                /* For integer literals */
+    double dbl;             /* For double literals */
     char* str;              /* For identifiers */
     struct ASTNode* node;   /* For AST nodes */
+    int dtype;              /* For data types */
 }
 
 /* TOKEN DECLARATIONS with their semantic value types */
-%token <num> NUM        /* Number token carries an integer value */
+%token <num> NUM        /* Integer literal token */
+%token <dbl> DOUBLE_LITERAL  /* Double literal token */
 %token <str> ID         /* Identifier token carries a string */
-%token INT PRINT        /* Keywords have no semantic value */
+%token INT DOUBLE PRINT /* Keywords */
 
 /* NON-TERMINAL TYPES - Define what type each grammar rule returns */
 %type <node> program stmt_list stmt decl assign expr print_stmt
+%type <dtype> type_spec
 
 /* OPERATOR PRECEDENCE AND ASSOCIATIVITY */
-%left '+'  /* Addition is left-associative: a+b+c = (a+b)+c */
+/* Lower precedence */
+%left '+' '-'  /* Addition and subtraction are left-associative */
+%left '*' '/'  /* Multiplication and division have higher precedence */
+/* Higher precedence */
 
 %%
 
@@ -70,12 +77,18 @@ stmt:
     | print_stmt /* Print statement */
     ;
 
-/* DECLARATION RULE - "int x;" */
+/* TYPE SPECIFIER - "int" or "double" */
+type_spec:
+    INT    { $$ = TYPE_INT; }
+    | DOUBLE { $$ = TYPE_DOUBLE; }
+    ;
+
+/* DECLARATION RULE - "int x;" or "double y;" */
 decl:
-    INT ID ';' { 
-        /* Create declaration node and free the identifier string */
-        $$ = createDecl($2);  /* $2 is the ID token's string value */
-        free($2);             /* Free the string copy from scanner */
+    type_spec ID ';' { 
+        /* Create declaration node with type and name */
+        $$ = createDecl($2, $1);  /* $2 is ID, $1 is type */
+        free($2);                 /* Free the string copy from scanner */
     }
     ;
 
@@ -91,8 +104,12 @@ assign:
 /* EXPRESSION RULES - Build expression trees */
 expr:
     NUM { 
-        /* Literal number */
-        $$ = createNum($1);  /* Create leaf node with number value */
+        /* Integer literal */
+        $$ = createNum($1);  /* Create leaf node with integer value */
+    }
+    | DOUBLE_LITERAL {
+        /* Double literal */
+        $$ = createDouble($1); /* Create leaf node with double value */
     }
     | ID { 
         /* Variable reference */
@@ -102,6 +119,18 @@ expr:
     | expr '+' expr { 
         /* Addition operation - builds binary tree */
         $$ = createBinOp('+', $1, $3);  /* Left child, op, right child */
+    }
+    | expr '-' expr { 
+        /* Subtraction operation */
+        $$ = createBinOp('-', $1, $3);
+    }
+    | expr '*' expr { 
+        /* Multiplication operation */
+        $$ = createBinOp('*', $1, $3);
+    }
+    | expr '/' expr { 
+        /* Division operation */
+        $$ = createBinOp('/', $1, $3);
     }
     ;
 

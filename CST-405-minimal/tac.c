@@ -59,6 +59,12 @@ char* generateTACExpr(ASTNode* node) {
             return temp;
         }
         
+        case NODE_DOUBLE: {
+            char* temp = malloc(30);
+            sprintf(temp, "%.6f", node->data.dbl);
+            return temp;
+        }
+        
         case NODE_VAR:
             return strdup(node->data.name);
         
@@ -67,8 +73,19 @@ char* generateTACExpr(ASTNode* node) {
             char* right = generateTACExpr(node->data.binop.right);
             char* temp = newTemp();
             
-            if (node->data.binop.op == '+') {
-                appendTAC(createTAC(TAC_ADD, left, right, temp));
+            switch(node->data.binop.op) {
+                case '+':
+                    appendTAC(createTAC(TAC_ADD, left, right, temp));
+                    break;
+                case '-':
+                    appendTAC(createTAC(TAC_SUB, left, right, temp));
+                    break;
+                case '*':
+                    appendTAC(createTAC(TAC_MUL, left, right, temp));
+                    break;
+                case '/':
+                    appendTAC(createTAC(TAC_DIV, left, right, temp));
+                    break;
             }
             
             return temp;
@@ -83,9 +100,12 @@ void generateTAC(ASTNode* node) {
     if (!node) return;
     
     switch(node->type) {
-        case NODE_DECL:
-            appendTAC(createTAC(TAC_DECL, NULL, NULL, node->data.name));
+        case NODE_DECL: {
+            char typeStr[10];
+            sprintf(typeStr, "%s", node->data.decl.type == TYPE_INT ? "int" : "double");
+            appendTAC(createTAC(TAC_DECL, typeStr, NULL, node->data.decl.name));
             break;
+        }
             
         case NODE_ASSIGN: {
             char* expr = generateTACExpr(node->data.assign.value);
@@ -118,12 +138,25 @@ void printTAC() {
         printf("%2d: ", lineNum++);
         switch(curr->op) {
             case TAC_DECL:
-                printf("DECL %s", curr->result);
-                printf("          // Declare variable '%s'\n", curr->result);
+                printf("DECL %s %s", curr->arg1 ? curr->arg1 : "int", curr->result);
+                printf("       // Declare %s variable '%s'\n", 
+                       curr->arg1 ? curr->arg1 : "int", curr->result);
                 break;
             case TAC_ADD:
                 printf("%s = %s + %s", curr->result, curr->arg1, curr->arg2);
                 printf("     // Add: store result in %s\n", curr->result);
+                break;
+            case TAC_SUB:
+                printf("%s = %s - %s", curr->result, curr->arg1, curr->arg2);
+                printf("     // Subtract: store result in %s\n", curr->result);
+                break;
+            case TAC_MUL:
+                printf("%s = %s * %s", curr->result, curr->arg1, curr->arg2);
+                printf("     // Multiply: store result in %s\n", curr->result);
+                break;
+            case TAC_DIV:
+                printf("%s = %s / %s", curr->result, curr->arg1, curr->arg2);
+                printf("     // Divide: store result in %s\n", curr->result);
                 break;
             case TAC_ASSIGN:
                 printf("%s = %s", curr->result, curr->arg1);
@@ -161,7 +194,10 @@ void optimizeTAC() {
                 newInstr = createTAC(TAC_DECL, NULL, NULL, curr->result);
                 break;
                 
-            case TAC_ADD: {
+            case TAC_ADD:
+            case TAC_SUB:
+            case TAC_MUL:
+            case TAC_DIV: {
                 // Check if both operands are constants
                 char* left = curr->arg1;
                 char* right = curr->arg2;
@@ -180,20 +216,73 @@ void optimizeTAC() {
                     }
                 }
                 
+                // Check if values are numeric (int or double)
+                int isLeftNum = isdigit(left[0]) || (left[0] == '-' && isdigit(left[1])) || strchr(left, '.');
+                int isRightNum = isdigit(right[0]) || (right[0] == '-' && isdigit(right[1])) || strchr(right, '.');
+                
                 // Constant folding
-                if (isdigit(left[0]) && isdigit(right[0])) {
-                    int result = atoi(left) + atoi(right);
-                    char* resultStr = malloc(20);
-                    sprintf(resultStr, "%d", result);
-                    
-                    // Store for propagation
-                    values[valueCount].var = strdup(curr->result);
-                    values[valueCount].value = resultStr;
-                    valueCount++;
-                    
-                    newInstr = createTAC(TAC_ASSIGN, resultStr, NULL, curr->result);
+                if (isLeftNum && isRightNum) {
+                    // Check if either is a double
+                    if (strchr(left, '.') || strchr(right, '.')) {
+                        double leftVal = atof(left);
+                        double rightVal = atof(right);
+                        double result;
+                        
+                        switch(curr->op) {
+                            case TAC_ADD: result = leftVal + rightVal; break;
+                            case TAC_SUB: result = leftVal - rightVal; break;
+                            case TAC_MUL: result = leftVal * rightVal; break;
+                            case TAC_DIV: 
+                                if (rightVal == 0.0) {
+                                    newInstr = createTAC(curr->op, left, right, curr->result);
+                                    break;
+                                }
+                                result = leftVal / rightVal;
+                                break;
+                        }
+                        
+                        if (curr->op != TAC_DIV || rightVal != 0.0) {
+                            char* resultStr = malloc(30);
+                            sprintf(resultStr, "%.6f", result);
+                            values[valueCount].var = strdup(curr->result);
+                            values[valueCount].value = resultStr;
+                            valueCount++;
+                            newInstr = createTAC(TAC_ASSIGN, resultStr, NULL, curr->result);
+                        }
+                    } else {
+                        // Integer arithmetic
+                        int leftVal = atoi(left);
+                        int rightVal = atoi(right);
+                        int result;
+                        
+                        switch(curr->op) {
+                            case TAC_ADD: result = leftVal + rightVal; break;
+                            case TAC_SUB: result = leftVal - rightVal; break;
+                            case TAC_MUL: result = leftVal * rightVal; break;
+                            case TAC_DIV: 
+                                if (rightVal == 0) {
+                                    // Division by zero - keep as is
+                                    newInstr = createTAC(curr->op, left, right, curr->result);
+                                    break;
+                                }
+                                result = leftVal / rightVal; 
+                                break;
+                        }
+                        
+                        if (curr->op != TAC_DIV || rightVal != 0) {
+                            char* resultStr = malloc(20);
+                            sprintf(resultStr, "%d", result);
+                            
+                            // Store for propagation
+                            values[valueCount].var = strdup(curr->result);
+                            values[valueCount].value = resultStr;
+                            valueCount++;
+                            
+                            newInstr = createTAC(TAC_ASSIGN, resultStr, NULL, curr->result);
+                        }
+                    }
                 } else {
-                    newInstr = createTAC(TAC_ADD, left, right, curr->result);
+                    newInstr = createTAC(curr->op, left, right, curr->result);
                 }
                 break;
             }
@@ -251,11 +340,23 @@ void printOptimizedTAC() {
         printf("%2d: ", lineNum++);
         switch(curr->op) {
             case TAC_DECL:
-                printf("DECL %s\n", curr->result);
+                printf("DECL %s %s\n", curr->arg1 ? curr->arg1 : "int", curr->result);
                 break;
             case TAC_ADD:
                 printf("%s = %s + %s", curr->result, curr->arg1, curr->arg2);
                 printf("     // Runtime addition needed\n");
+                break;
+            case TAC_SUB:
+                printf("%s = %s - %s", curr->result, curr->arg1, curr->arg2);
+                printf("     // Runtime subtraction needed\n");
+                break;
+            case TAC_MUL:
+                printf("%s = %s * %s", curr->result, curr->arg1, curr->arg2);
+                printf("     // Runtime multiplication needed\n");
+                break;
+            case TAC_DIV:
+                printf("%s = %s / %s", curr->result, curr->arg1, curr->arg2);
+                printf("     // Runtime division needed\n");
                 break;
             case TAC_ASSIGN:
                 printf("%s = %s", curr->result, curr->arg1);

@@ -4,12 +4,13 @@ YACC = bison
 CFLAGS = -g -Wall
 
 TARGET = minicompiler
+OUT = $(TARGET).exe
 OBJS = lex.yy.o parser.tab.o main.o ast.o symtab.o codegen.o tac.o
 
-all: $(TARGET)
+all: $(OUT)
 
-$(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS)
+$(OUT): $(OBJS)
+	$(CC) $(CFLAGS) -o $(OUT) $(OBJS)
 
 lex.yy.c: scanner.l parser.tab.h
 	$(LEX) scanner.l
@@ -39,11 +40,11 @@ tac.o: tac.c tac.h ast.h
 	$(CC) $(CFLAGS) -c tac.c
 
 clean:
-	rm -f $(TARGET) $(OBJS) lex.yy.c parser.tab.c parser.tab.h *.s
+	del /f $(OUT) $(OBJS) lex.yy.c parser.tab.c parser.tab.h *.s 2>nul || exit 0
 
-test: $(TARGET)
-	./$(TARGET) test.c test.s
-	@echo "\n=== Generated MIPS Code ==="
-	@cat test.s
+test: $(OUT)
+	$(OUT) test.c test.s
+	@echo === Generated MIPS Code ===
+	@type test.s
 
 .PHONY: all clean test
