@@ -131,7 +131,7 @@ void generateTAC(ASTNode* node) {
 
 void printTAC() {
     printf("Unoptimized TAC Instructions:\n");
-    printf("─────────────────────────────\n");
+    printf("-----------------------------\n");
     TACInstr* curr = tacList.head;
     int lineNum = 1;
     while (curr) {
@@ -191,7 +191,7 @@ void optimizeTAC() {
         
         switch(curr->op) {
             case TAC_DECL:
-                newInstr = createTAC(TAC_DECL, NULL, NULL, curr->result);
+                newInstr = createTAC(TAC_DECL, curr->arg1, NULL, curr->result);
                 break;
                 
             case TAC_ADD:
@@ -333,7 +333,7 @@ void optimizeTAC() {
 
 void printOptimizedTAC() {
     printf("Optimized TAC Instructions:\n");
-    printf("─────────────────────────────\n");
+    printf("-----------------------------\n");
     TACInstr* curr = optimizedList.head;
     int lineNum = 1;
     while (curr) {

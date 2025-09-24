@@ -42,10 +42,10 @@ double_1: .double 5.000000
     sw $t0, 24($sp)
     lw $t0, 24($sp)
     ldc1 $f0, 0($sp)
-    mtc1 $t0, $f-2
-    cvt.d.w $f-2, $f-2
-    mul.d $f-2, $f-2, $f0
-    sdc1 $f-2, 16($sp)
+    mtc1 $t0, $f0
+    cvt.d.w $f0, $f0
+    mul.d $f0, $f0, $f0
+    sdc1 $f0, 16($sp)
     ldc1 $f0, 16($sp)
     # Print double
     mov.d $f12, $f0

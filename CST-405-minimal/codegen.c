@@ -78,62 +78,99 @@ void genExpr(ASTNode* node) {
             int isRightDouble = isDoubleExpr(node->data.binop.right);
             int isResultDouble = isLeftDouble || isRightDouble;
             
-            genExpr(node->data.binop.left);
-            int leftIntReg = tempReg - 1;
-            int leftFloatReg = tempFloatReg - 2;
+            // Reset registers for cleaner tracking
+            int startIntReg = tempReg;
+            int startFloatReg = tempFloatReg;
             
+            // Generate left operand
+            genExpr(node->data.binop.left);
+            
+            // Figure out where left operand is stored
+            int leftIntReg = -1;
+            int leftFloatReg = -1;
+            if (isLeftDouble) {
+                leftFloatReg = tempFloatReg - 2;
+            } else {
+                leftIntReg = tempReg - 1;
+            }
+            
+            // Save registers if needed
+            int savedLeftIntReg = leftIntReg;
+            int savedLeftFloatReg = leftFloatReg;
+            
+            // Generate right operand
             genExpr(node->data.binop.right);
-            int rightIntReg = tempReg - 1;
-            int rightFloatReg = tempFloatReg - 2;
+            
+            // Figure out where right operand is stored
+            int rightIntReg = -1;
+            int rightFloatReg = -1;
+            if (isRightDouble) {
+                rightFloatReg = tempFloatReg - 2;
+            } else {
+                rightIntReg = tempReg - 1;
+            }
             
             if (isResultDouble) {
-                // Convert int to double if needed
+                // We need both operands in floating-point registers
+                int resultFloatReg = startFloatReg;
+                
+                // Convert left operand to double if needed
                 if (!isLeftDouble) {
-                    fprintf(output, "    mtc1 $t%d, $f%d\n", leftIntReg, leftFloatReg);
-                    fprintf(output, "    cvt.d.w $f%d, $f%d\n", leftFloatReg, leftFloatReg);
+                    fprintf(output, "    mtc1 $t%d, $f%d\n", savedLeftIntReg, resultFloatReg);
+                    fprintf(output, "    cvt.d.w $f%d, $f%d\n", resultFloatReg, resultFloatReg);
+                } else {
+                    resultFloatReg = savedLeftFloatReg;
                 }
+                
+                // Convert right operand to double if needed
+                int rightFloatRegToUse;
                 if (!isRightDouble) {
-                    fprintf(output, "    mtc1 $t%d, $f%d\n", rightIntReg, rightFloatReg);
-                    fprintf(output, "    cvt.d.w $f%d, $f%d\n", rightFloatReg, rightFloatReg);
+                    rightFloatRegToUse = resultFloatReg + 2;
+                    fprintf(output, "    mtc1 $t%d, $f%d\n", rightIntReg, rightFloatRegToUse);
+                    fprintf(output, "    cvt.d.w $f%d, $f%d\n", rightFloatRegToUse, rightFloatRegToUse);
+                } else {
+                    rightFloatRegToUse = rightFloatReg;
                 }
                 
                 // Perform floating-point operation
                 switch(node->data.binop.op) {
                     case '+':
-                        fprintf(output, "    add.d $f%d, $f%d, $f%d\n", leftFloatReg, leftFloatReg, rightFloatReg);
+                        fprintf(output, "    add.d $f%d, $f%d, $f%d\n", resultFloatReg, resultFloatReg, rightFloatRegToUse);
                         break;
                     case '-':
-                        fprintf(output, "    sub.d $f%d, $f%d, $f%d\n", leftFloatReg, leftFloatReg, rightFloatReg);
+                        fprintf(output, "    sub.d $f%d, $f%d, $f%d\n", resultFloatReg, resultFloatReg, rightFloatRegToUse);
                         break;
                     case '*':
-                        fprintf(output, "    mul.d $f%d, $f%d, $f%d\n", leftFloatReg, leftFloatReg, rightFloatReg);
+                        fprintf(output, "    mul.d $f%d, $f%d, $f%d\n", resultFloatReg, resultFloatReg, rightFloatRegToUse);
                         break;
                     case '/':
-                        fprintf(output, "    div.d $f%d, $f%d, $f%d\n", leftFloatReg, leftFloatReg, rightFloatReg);
+                        fprintf(output, "    div.d $f%d, $f%d, $f%d\n", resultFloatReg, resultFloatReg, rightFloatRegToUse);
                         break;
                 }
-                tempFloatReg = leftFloatReg + 2;
+                tempFloatReg = resultFloatReg + 2;
+                tempReg = startIntReg;  // Reset int register counter
             } else {
                 // Integer operations
                 switch(node->data.binop.op) {
                     case '+':
-                        fprintf(output, "    add $t%d, $t%d, $t%d\n", leftIntReg, leftIntReg, rightIntReg);
+                        fprintf(output, "    add $t%d, $t%d, $t%d\n", savedLeftIntReg, savedLeftIntReg, rightIntReg);
                         break;
                     case '-':
-                        fprintf(output, "    sub $t%d, $t%d, $t%d\n", leftIntReg, leftIntReg, rightIntReg);
+                        fprintf(output, "    sub $t%d, $t%d, $t%d\n", savedLeftIntReg, savedLeftIntReg, rightIntReg);
                         break;
                     case '*':
-                        fprintf(output, "    mul $t%d, $t%d, $t%d\n", leftIntReg, leftIntReg, rightIntReg);
+                        fprintf(output, "    mul $t%d, $t%d, $t%d\n", savedLeftIntReg, savedLeftIntReg, rightIntReg);
                         break;
                     case '/':
-                        fprintf(output, "    div $t%d, $t%d\n", leftIntReg, rightIntReg);
-                        fprintf(output, "    mflo $t%d\n", leftIntReg);  // Get quotient from LO register
+                        fprintf(output, "    div $t%d, $t%d\n", savedLeftIntReg, rightIntReg);
+                        fprintf(output, "    mflo $t%d\n", savedLeftIntReg);  // Get quotient from LO register
                         break;
                     default:
                         fprintf(stderr, "Error: Unknown operator %c\n", node->data.binop.op);
                         exit(1);
                 }
-                tempReg = leftIntReg + 1;
+                tempReg = savedLeftIntReg + 1;
+                tempFloatReg = startFloatReg;  // Reset float register counter
             }
             break;
         }
